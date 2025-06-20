@@ -1,0 +1,59 @@
+// loadPlugin("hdf5")
+// tb = select * from loadTable("dfs://tushare", "analysis_table_1D")
+// hdf5::saveHDF5(tb, "analysis_table_1D.h5", "analysis_table", false, 1000)
+
+// hdf5::ls("analysis_table_1D.h5")
+// hdf5::lsTable("analysis_table_1D.h5")
+// hdf5::extractHDF5Schema("analysis_table_1D.h5", "analysis_table")
+// a = hdf5::loadHDF5("analysis_table_1D.h5", "analysis_table")
+// a.replaceColumn!(`starttime, date(a.starttime))
+// a.replaceColumn!(`endtime, date(a.endtime))
+
+// dbhandler = database("dfs://tushare")
+// tableName = "some111"
+// fileName = "analysis_table_1D.h5"
+// datasetName = "analysis_table"
+// hdf5::loadHDF5Ex(dbhandler, tableName, `starttime, fileName, datasetName)
+
+// schema("")
+
+// hdf5::saveHDF5(tb, "alpha101", "2010", false, 1000)
+
+// select * from loadTable("dfs://tushare", "alpha101") limit 10
+// a = select * from loadTable("dfs://tushare", "alpha101") where tradetime < 2020.02.01 and factorname = "alpha7"
+// a = select * from loadTable("dfs://tushare", "alpha191") where tradetime >= 2020.01.01 and tradetime < 2020.02.01
+
+
+// select * from a where value is null
+
+
+// n=100
+// t1=table(1..n as id, rand(1000, n) as x)
+// query = <select * from loadTable('dfs://tushare', 't_index_hs300') where trade_date = 2010.01.04>
+// saveText(query, "/data/disk0/dolphindb/server/clusterDemo/data/dnode1/test.csv")
+// getHomeDir()
+
+
+
+
+
+// 导出alpha101数据至"/data/disk0/dolphindb/server/clusterDemo/data/dnode1/alpha101.csv"
+trade_list = select distinct month(tradetime) as tradetime from loadTable('dfs://tushare', 'alpha101')
+for (month in trade_list.tradetime){
+    starttime = second(now())
+    query = <select * from loadTable('dfs://tushare', 'alpha101') where month(tradetime) = month>
+    saveText(query, "/data/disk0/dolphindb/server/clusterDemo/data/dnode1/alpha101.csv",,1)
+    endtime = second(now())
+    print("已导出" + month + "月的alpha101数据,耗时" + string(endtime-starttime) + "秒")
+}
+
+
+// 导出alpha191数据至"/data/disk0/dolphindb/server/clusterDemo/data/dnode1/alpha191.csv"
+trade_list = select distinct month(tradetime) as tradetime from loadTable('dfs://tushare', 'alpha191')
+for (month in trade_list.tradetime){
+    starttime = second(now())
+    query = <select * from loadTable('dfs://tushare', 'alpha191') where month(tradetime) = month>
+    saveText(query, "/data/disk0/dolphindb/server/clusterDemo/data/dnode1/alpha191.csv",,1)
+    endtime = second(now())
+    print("已导出" + month + "月的alpha191数据,耗时" + string(endtime-starttime) + "秒")
+}

@@ -1,0 +1,95 @@
+loadPlugin("mysql")
+//建库 daily_tushare_alpha101
+// if(existsDatabase("dfs://tushare")){
+//     dropDatabase("dfs://tushare")
+// }
+
+dbPath="dfs://tushare" 
+yearRange=date(1990.01M + 12*0..40)
+db=database(dbPath,RANGE,yearRange)
+go;
+
+conn = mysql::connect(`172.18.18.242, 3306, `quanter, `quantcreate2025, `daily_ts)
+
+// 建表 tushare_daily_st_sus_ind
+columns1=`ts_code`trade_date`open`high`low`close`pre_close`change`pct_chg`vol`amount`suspend_timing`suspend_type`adj_factor`pe`pb`ps`dv_ratio`total_share`float_share`free_share`total_mv`circ_mv`code`st_name`is_st`short_name`area`industry`market`list_status`list_date
+type1=[SYMBOL,NANOTIMESTAMP,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,STRING,STRING,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,STRING,STRING,STRING,STRING,STRING,STRING,STRING,STRING,STRING]
+tushare_daily_st_sus_ind=db.createPartitionedTable(table(100000000:0,columns1,type1),`tushare_daily_st_sus_ind,`trade_date)
+
+tb1 = mysql::load(conn, "select * from tushare_daily_st_sus_ind where trade_date>='2010-01-01' and trade_date<='2025-02-21'")
+tb1 = select ts_code, date(trade_date) as trade_date, round(open, 3) as open, round(high, 3) as high, round(low, 3) as low, round(close, 3) as close, round(pre_close, 3) as pre_close, round(change, 3) as change, round(pct_chg/100, 4) as pct_chg, round(vol, 0) as vol, round(amount, 3) as amount, suspend_timing, suspend_type, round(adj_factor, 3) as adj_factor, round(pe, 4) as pe, round(pb, 4) as pb, round(ps, 4) as ps, round(dv_ratio, 4) as dv_ratio, round(total_share, 0) as total_share, round(float_share, 0) as float_share, round(free_share, 0) as free_share, round(total_mv, 0) as total_mv, round(circ_mv, 0) as circ_mv, code, st_name, is_st, short_name, area, industry, market, list_status, list_date from tb1
+tushare_daily_st_sus_ind.append!(tb1)
+go;
+
+// 建表 t_index_zz500
+columns2=`ts_code`trade_date`close`open`high`low`pre_close`change`pct_chg`vol`amount`update_time
+type2=[SYMBOL,NANOTIMESTAMP,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,STRING]
+t_index_zz500=db.createPartitionedTable(table(10000:0,columns2,type2),`t_index_zz500,`trade_date)
+
+tb2 = mysql::load(conn, "select * from t_index_zz500 where trade_date>='2010-01-01' and trade_date<='2025-02-21'")
+tb2 = select ts_code, date(trade_date) as trade_date, round(close, 3) as close, round(open, 3) as open, round(high, 3) as high, round(low, 3) as low, round(pre_close, 3) as pre_close, round(change, 3) as change, round(pct_chg/100, 4) as pct_chg, round(vol, 0) as vol, round(amount, 3) as amount, update_time from tb2
+t_index_zz500.append!(tb2)
+go;
+
+// 建表 t_index_hs300
+columns3=`ts_code`trade_date`close`open`high`low`pre_close`change`pct_chg`vol`amount`update_time
+type3=[SYMBOL,NANOTIMESTAMP,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,STRING]
+t_index_hs300=db.createPartitionedTable(table(10000:0,columns3,type3),`t_index_hs300,`trade_date)
+
+tb3 = mysql::load(conn, "select * from t_index_hs300 where trade_date>='2010-01-01' and trade_date<='2025-02-21'")
+tb3 = select ts_code, date(trade_date) as trade_date, round(close, 3) as close, round(open, 3) as open, round(high, 3) as high, round(low, 3) as low, round(pre_close, 3) as pre_close, round(change, 3) as change, round(pct_chg/100, 4) as pct_chg, round(vol, 0) as vol, round(amount, 3) as amount, update_time from tb3
+t_index_hs300.append!(tb3)
+go;
+
+//建表 minute_5_ts
+if(existsTable("dfs://tushare", `minute_5_ts)){
+    dropTable(database("dfs://tushare"), `minute_5_ts)
+}
+
+
+conn2 = mysql::connect(`172.18.18.242, 3306, `quanter, `quantcreate2025, `minute_5_ts)
+stock_list = mysql::showTables(conn2)
+
+columns=`tradingdate`ticker`day`open`high`low`close`ts_code`volume`amount`adj_factor`suspend_type`suspend_timing`total_mv`st_name`is_st`pre_close`change`update_time`f_open`f_high`f_low`f_close`f_volume`f_amount`f_factor`ind_name`wind_name
+type=[NANOTIMESTAMP,STRING,DATE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,SYMBOL,DOUBLE,DOUBLE,DOUBLE,STRING,STRING,DOUBLE,STRING,STRING,DOUBLE,DOUBLE,STRING,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,STRING,STRING]
+minute_5_ts=db.createPartitionedTable(table(100000000:0,columns,type),`minute_5_ts,`tradingdate)
+// minute_5_ts = loadTable("dfs://tushare", `minute_5_ts)
+for(tb_name in stock_list.Tables_in_minute_5_ts){
+    conn3 = mysql::connect(`172.18.18.242, 3306, `quanter, `quantcreate2025, `minute_5_ts)
+    query = "select * from " + tb_name + " where day>='2010-01-01'"
+    minute_data = mysql::load(conn3, query)
+    minute_data = select tradingdate, ticker, day, round(open, 2) as open, round(high, 2) as high, round(low, 2) as low, round(close, 2) as close, ts_code, round(volume, 0) as volume, round(amount, 0) as amount, round(adj_factor, 3) as adj_factor, string(suspend_type) as suspend_type, string(suspend_timing) as suspend_timing, round(total_mv, 0) as total_mv, string(st_name) as st_name, string(is_st) as is_st, round(pre_close, 2) as pre_close, round(change, 2) as change, string(update_time), round(f_open, 2) as f_open, round(f_high, 2) as f_high, round(f_low, 2) as f_low, round(f_close, 2) as f_close, round(f_volume, 0) as f_volume, round(f_amount, 0) as f_amount, round(f_factor, 3) as f_factor, string(ind_name) as ind_name, string(wind_name) as wind_name from minute_data
+    replaceColumn!(minute_data,"st_name",string(minute_data.st_name))
+    replaceColumn!(minute_data,"is_st",string(minute_data.is_st))
+    replaceColumn!(minute_data,"suspend_timing",string(minute_data.suspend_timing))
+    replaceColumn!(minute_data,"suspend_type",string(minute_data.suspend_type))
+    replaceColumn!(minute_data,"ind_name",string(minute_data.ind_name))
+    replaceColumn!(minute_data,"wind_name",string(minute_data.wind_name))
+    print("正在导入" + tb_name)
+    minute_5_ts.append!(minute_data)
+}
+go;
+// 建表 fields
+
+// if(existsTable("dfs://tushare", `fields)){
+//     dropTable(database("dfs://tushare"), `fields)
+// }
+
+// 计算 VWAP 表
+stock_list = select distinct ts_code from loadTable("dfs://tushare", `tushare_daily_st_sus_ind)
+columns4=`tradetime`security`open`high`low`close`vol`amount`vwap`cap`indclass`index_open`index_close`suspend_type`is_st`market`list_status
+type4=[DATE,SYMBOL,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,STRING,DOUBLE,DOUBLE,STRING,STRING,STRING,STRING]
+db=database("dfs://tushare")
+fields_handle=db.createPartitionedTable(table(100000000:0,columns4,type4),`fields,`tradetime)
+
+vwap_res = select ts_code, day, sum(f_volume * (f_high + f_low + f_close) * f_factor / 3)/sum(f_volume) as vwap from loadTable("dfs://tushare", `minute_5_ts) group by ts_code, day
+index_zz500 = select ts_code, trade_date, open, close from loadTable("dfs://tushare", `t_index_zz500)
+tushare_daily_st_sus_ind = select * from loadTable("dfs://tushare", `tushare_daily_st_sus_ind)
+fields = select date(a.trade_date) as tradetime, a.ts_code as security, round(a.open*a.adj_factor, 5) as open, round(a.high*a.adj_factor, 5) as high, round(a.low*a.adj_factor, 5) as low, round(a.close*a.adj_factor, 5) as close, a.vol, a.amount, round(b.vwap, 5) as vwap, a.total_mv as cap, a.industry as indclass, c.open as index_open, c.close as index_close, a.suspend_type, a.is_st, a.market, a.list_status
+from tushare_daily_st_sus_ind as a
+left join vwap_res as b on date(a.trade_date) = b.day and a.ts_code = b.ts_code
+left join index_zz500 as c on date(a.trade_date) = date(c.trade_date)
+order by tradetime, security
+
+fields_handle.append!(fields)
+go;

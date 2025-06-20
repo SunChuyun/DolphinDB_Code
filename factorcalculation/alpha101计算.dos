@@ -1,0 +1,72 @@
+use wq101alpha
+use prepare101
+
+raw_data = select * from loadTable("dfs://tushare", `fields) where suspend_type != "S" and is_st != "是" and market != "北交所" and list_status = "L"
+not_null_data = select * from raw_data where close is not null and high is not null and low is not null and open is not null and vol is not null and amount is not null and vwap is not null
+
+// 建表 alpha101
+// if(existsTable("dfs://tushare", `alpha101)){
+//     dropTable(database("dfs://tushare"), `alpha101)
+// }
+
+columns=`tradetime`securityid`factorname`value
+type=[NANOTIMESTAMP,SYMBOL,STRING,DOUBLE]
+db=database("dfs://tushare")
+alpha101=db.createPartitionedTable(table(1000000000:0,columns,type),`alpha101,`tradetime)
+
+// 导入数据
+data = select security as securityid, tradetime, open, close, high, low, vol, vwap, cap, indclass from not_null_data 
+startTime = 2010.01.01
+endTime = 2025.02.17
+
+def writePanelInLongTable(result, factor, dbName, tbName){
+    if (typestr(result) == CODE){
+        res = result.eval()$DOUBLE
+    } else {
+        res = result
+    }
+    resWide = table(res.rowNames() as tradetime, res)
+    returnTable = resWide.unpivot(`tradetime, resWide.colNames()[1:])
+    returnTable[`factorname] = factor
+    returnTable.rename!(`valueType, `securityid)
+    returnTable.reorderColumns!(`tradetime`securityid`factorname`value)
+    returnTable = select * from returnTable where value is not null
+    loadTable(dbName, tbName).append!(returnTable)
+} 
+
+// 非行业alpha因子计算
+// passList = 48 56 58 59 63 67 69 70 76 79 80 82 87 89 90 91 93 97 100 
+// i = 1
+// factor = factorname
+
+error = dict(INT, STRING)
+defs()
+for (i in 1:102){
+    try{
+        alphaName = exec name from defs() where name = "prepare101::calAlpha"+string(i)
+        alphaSyntax = exec syntax from defs() where name = "prepare101::calAlpha"+string(i)
+        function = alphaName + alphaSyntax
+        t1 = second(now())
+
+        // 计算因子
+        res = parseExpr(function[0]).eval()
+        factorname = "alpha" + string(i)
+        // writePanelInLongTable(res, factorname, "dfs://tushare", "alpha101")
+
+        t2 = second(now())
+        print("已导入alpha" + string(i) + "数据，共消耗" + string(t2-t1) + "秒")
+    }
+    catch(ex){
+        error[i] = ex
+        print("alpha" + string(i) + "导入出错：" + ex)
+    }
+}
+
+
+
+// select securityid, count(*) from loadTable("dfs://tushare", `alpha101) where value is null and tradetime >= 2025.01.01 and tradetime <= 2025.02.17 and factorname = "alpha2" group by securityid
+// 停牌或未上市股票value为空值，已剔除
+
+
+
+select distinct date(tradetime) as tradetime from loadTable("dfs://tushare", `alpha101)

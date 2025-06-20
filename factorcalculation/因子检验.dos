@@ -1,0 +1,144 @@
+/* 因子处理 */
+// 去极值
+def drop_outlier(factor){
+    sigma_coef = 3
+    factors = factor
+    // 去除异常值:大于3倍标准差的异常值，小于-3倍标准差的异常值
+    factors[(factors > mean(factors) + sigma_coef*std(factors))] =  mean(factors) + sigma_coef*std(factors)
+    factors[(factors < mean(factors) - sigma_coef*std(factors))] =  mean(factors) - sigma_coef*std(factors)
+    return factors
+}
+
+use alphalens
+
+def factortest(prefix, fname, starttime, endtime){  // 检验alpha101或alpha191
+    single_factor_table = select date(tradetime) as date, left(securityid, 6) as asset, value as factor from loadTable("dfs://tushare", prefix) where factorname = fname and tradetime >= temporalParse(starttime, "yyyy-MM-dd") and tradetime <= temporalParse(endtime, "yyyy-MM-dd")
+    //去极值
+    single_factor_table[`factor] = contextby(drop_outlier, single_factor_table[`factor], single_factor_table.date)
+    //标准化
+    single_factor_table[`factor] = contextby(zscore, single_factor_table[`factor], single_factor_table.date)
+
+    price = select close from loadTable("dfs://tushare", "fields") pivot by tradetime as date, left(security, 6) as securityId
+
+    cleanFactorAndForwardReturns = get_clean_factor_and_forward_returns(
+        factor=single_factor_table,
+        prices=price,
+        groupby=NULL,
+        binning_by_group=false, 
+        quantiles=5,  // 分5组
+        bins=NULL,  
+        periods=[1, 5, 10],  // 持仓周期
+        filter_zscore=3,  // 异常值过滤
+        groupby_labels=NULL,
+        max_loss=0.35,
+        zero_aware=false,
+        cumulative_returns=true  // 累计收益
+    )
+    
+    fullTearSheet = plot_create_full_tear_sheet(
+        factor_data=cleanFactorAndForwardReturns, 
+        long_short=true,  
+        group_neutral=false,
+        by_group=false
+    )
+    
+    return [fullTearSheet, starttime, endtime]
+}
+
+def get_result(fullsheet, factorname, prefix, freq=5){
+    starttime = fullsheet[1]
+    endtime = fullsheet[2]
+    sheet = fullsheet[0]
+
+    // IC分析
+    IC_table = sheet["plot_information_tear_sheet"]["Information_Analysis"]
+    IC_Mean = IC_table[IC_table["Information_Analysis"] == "IC_Mean"] // 1D, 5D, 10D
+    IC_Std = IC_table[IC_table["Information_Analysis"] == "IC_Std"] // 1D, 5D, 10D
+    IC_IR = IC_Mean / IC_Std // 1D, 5D, 10D
+
+    // 收益分析
+    return_table_1D = sheet["plot_returns_tear_sheet"]["cumulative_factor_data"]
+    ret_1D = return_table_1D[size(return_table_1D)-1]
+
+    return_analysis = sheet["plot_returns_tear_sheet"]["returns_analysis"]
+    ann_alpha = return_analysis[return_analysis["returns_analysis"] == "Ann_alpha"]// 1D, 5D, 10D
+    beta = return_analysis[return_analysis["returns_analysis"] == "beta"] // 1D, 5D, 10D
+
+    // 换手率分析
+    turnover_table = sheet["plot_turnover_tear_sheet"]["Mean_Factor_Rank_Autocorrelation"]
+    turnover = turnover_table["Mean_Factor_Rank_Autocorrelation"] // 1D, 5D, 10D
+
+    fn = prefix + "-" + factorname
+
+    if(freq == 1){
+        return [fn, temporalParse(starttime, "yyyy-MM-dd"), temporalParse(endtime, "yyyy-MM-dd"), double(IC_Mean[0,1]), double(IC_Std[0,1]), double(IC_IR[0,1]), double(ret_1D), double(ann_alpha[0,1]), double(beta[0,1]), double(turnover[0])]
+    }
+    else if(freq == 5){
+        return [fn, temporalParse(starttime, "yyyy-MM-dd"), temporalParse(endtime, "yyyy-MM-dd"), double(IC_Mean[0,2]), double(IC_Std[0,2]), double(IC_IR[0,2]), double(ret_1D), double(ann_alpha[0,2]), double(beta[0,2]), double(turnover[1])]
+    }
+    else if(freq == 10){
+        return [fn, temporalParse(starttime, "yyyy-MM-dd"), temporalParse(endtime, "yyyy-MM-dd"), double(IC_Mean[0,3]), double(IC_Std[0,3]), double(IC_IR[0,3]), double(ret_1D), double(ann_alpha[0,3]), double(beta[0,3]), double(turnover[2])]
+    }
+}
+
+
+prefix = "alpha101"  // 检验alpha101或alpha191
+
+factor = select distinct factorname from loadTable("dfs://tushare", prefix)
+factor_list = factor.factorname
+column_names = ["factorname", "starttime", "endtime", "IC_Mean", "IC_Std", "IC_IR", "ret_1D", "ann_alpha", "beta", "auto_corr"]
+types = [SYMBOL, DATE, DATE, DOUBLE, DOUBLE, DOUBLE, DOUBLE, DOUBLE, DOUBLE, DOUBLE]
+
+// if(existsTable("dfs://tushare", `analysis_table_1D)){
+//     dropTable(database("dfs://tushare"), `analysis_table_1D)
+// }
+// if(existsTable("dfs://tushare", `analysis_table_5D)){
+//     dropTable(database("dfs://tushare"), `analysis_table_5D)
+// }
+// if(existsTable("dfs://tushare", `analysis_table_10D)){
+//     dropTable(database("dfs://tushare"), `analysis_table_10D)
+// }
+
+db = database("dfs://tushare")
+// analysis_table_1D = db.createTable(table(100000:0, column_names, types), `analysis_table_1D)
+// analysis_table_5D = db.createTable(table(100000:0, column_names, types), `analysis_table_5D)
+// analysis_table_10D = db.createTable(table(100000:0, column_names, types), `analysis_table_10D)
+analysis_table_1D = loadTable("dfs://tushare", "analysis_table_1D")
+analysis_table_5D = loadTable("dfs://tushare", "analysis_table_5D")
+analysis_table_10D = loadTable("dfs://tushare", "analysis_table_10D")
+
+error = dict(STRING, STRING)
+for(factor in factor_list){
+    try{
+        t1 = second(now())
+
+        t_1D = table(1000:0, column_names, types)
+        t_5D = table(1000:0, column_names, types)
+        t_10D = table(1000:0, column_names, types)
+
+        sheet = factortest(prefix, factor, "2023-04-01", "2024-01-01")  //"2020-09-01", "2021-09-01"上涨行情  "2023-04-01", "2024-01-01"下跌行情
+        res_1D = get_result(sheet, factor, prefix, 1)
+        res_5D = get_result(sheet, factor, prefix, 5)
+        res_10D = get_result(sheet, factor, prefix, 10)
+
+        insert into t_1D values(res_1D)
+        insert into t_5D values(res_5D)
+        insert into t_10D values(res_10D)
+
+        analysis_table_1D.append!(t_1D)
+        analysis_table_5D.append!(t_5D)
+        analysis_table_10D.append!(t_10D)
+
+        t2 = second(now())
+        print("已计算因子" + factor + "的检验结果，共消耗" + string(t2-t1) + "秒")
+    }
+    catch(ex){
+        error[factor] = ex[0] + ": " + ex[1]
+        print("计算因子" + factor + "出错:", ex)
+    }
+}
+
+select * from loadTable("dfs://tushare", "analysis_table_1D") where factorname.startsWith("alpha101")
+// delete from loadTable("dfs://tushare", "analysis_table_1D") where starttime = 2010.01.01 and endtime = 2025.01.01
+// delete from loadTable("dfs://tushare", "analysis_table_5D") where starttime = 2010.01.01 and endtime = 2025.01.01
+// delete from loadTable("dfs://tushare", "analysis_table_10D") where starttime = 2010.01.01 and endtime = 2025.01.01

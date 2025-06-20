@@ -1,0 +1,51 @@
+dbPath="dfs://factors" 
+yearRange=date(1990.01M + 12*0..40)
+db=database(dbPath,RANGE,yearRange)
+go;
+
+columns=`tradetime`securityid`factorname`value
+type=[NANOTIMESTAMP,SYMBOL,STRING,DOUBLE]
+db=database("dfs://factors")
+alpha101=db.createPartitionedTable(table(1000000000:0,columns,type),`alpha101,`tradetime)
+
+columns=`tradetime`securityid`factorname`value
+type=[NANOTIMESTAMP,SYMBOL,STRING,DOUBLE]
+db=database("dfs://factors")
+alpha191=db.createPartitionedTable(table(1000000000:0,columns,type),`alpha191,`tradetime)
+
+if(existsTable("dfs://factors", `alpha101)){
+    dropTable(database("dfs://factors"), `alpha101)
+}
+
+alpha101 = loadTable("dfs://factors", `alpha101)
+alpha101_date = select distinct tradetime from loadTable("dfs://tushare", `alpha101)
+already_list = select distinct tradetime from loadTable("dfs://factors", `alpha101)
+for (date in alpha101_date["tradetime"]){
+    if (date in already_list["tradetime"]){
+        print("日期：" + string(date) + " 已存在，跳过导入")
+    }
+    else{
+        print("正在导入alpha101数据，日期：" + string(date))
+        alpha101_factor = select * from loadTable("dfs://tushare", `alpha101) where tradetime = date
+        alpha101.append!(alpha101_factor)
+    }
+}
+
+alpha191 = loadTable("dfs://factors", `alpha191)
+alpha191_date = select distinct tradetime from loadTable("dfs://tushare", `alpha191)
+already_list = select distinct tradetime from loadTable("dfs://factors", `alpha191)
+for (date in alpha191_date["tradetime"]){
+    if (date in already_list["tradetime"]){
+        print("日期：" + string(date) + " 已存在，跳过导入")
+    }
+    else{
+        print("正在导入alpha191数据，日期：" + string(date))
+        alpha191_factor = select * from loadTable("dfs://tushare", `alpha191) where tradetime = date
+        alpha191.append!(alpha191_factor)
+    }
+}
+
+
+
+
+select * from loadTable("dfs://tushare", `tushare_daily_st_sus_ind) where ts_code = "601988.SH" and trade_date > 2025.01.18 and trade_date < 2025.01.30

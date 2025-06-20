@@ -1,0 +1,184 @@
+loadPlugin("Backtest")
+/*
+1.股票池的选择：剔除st、退市股、风险预警股，包含主板、科创板、创业板。
+
+2.按照因子值从大到小排序
+
+3.定期换仓买入因子值的50只股票(等权买入)
+*/
+
+//step 1：策略实现
+def isBuyAble(data){
+	//判断是否可以以收盘价买入
+	if(data.volume <= 0.001 or (data.upLimitPrice == data.close)){
+		return false //买入条件：收盘价不是涨停价，当日没有停牌
+	}
+	return true
+}
+def isSellAble(data){
+	//判断是否可以以收盘价卖出
+	if(data.volume <= 0.001 or (data.downLimitPrice == data.close)){
+		return false //卖出条件：收盘价不是跌停价，当日没有停牌
+	}
+	return true
+}
+
+def checkBuyVolume(istock, num){
+	if(num <= 0) {return 0 }
+	if(istock.substr(0,2) == "68"   and num >= 200){//科创板
+		return num
+	}
+	else if(istock.substr(0,2) == "68"){ return 0}
+	return floor(int(num)/100)*100
+}
+def getBuyAbleVolume(istock, cash, price){
+	if(price <= 0. ) {return 0 }
+	if(istock.substr(0,2) == "68" and floor(cash/price) >= 200){//科创板
+		return floor(cash/price)
+	}
+	else if(istock.substr(0,2) == "68"){ return 0}
+	return floor(floor(cash/price)/100)*100
+}
+def getclosePrice(msg,istock){return msg[istock].close}
+
+
+// 因子值选股策略
+def alpha1_strategy(mutable contexts, msg){
+	// 计算因子值最大的的50只股票
+	planNum = 50
+	plan = array(SYMBOL, 0)
+	rank = array(DOUBLE, 0)
+	for(stock in msg.keys()){
+		value = msg[stock]['value']//因子值
+		plan.append!(stock)
+		rank.append!(value)
+	}
+	stockPlan= plan[isortTop(rank, planNum, false)]//因子值最大的
+	contexts["targetWeight"]=table(stockPlan as symbol,take(1./size(stockPlan),size(stockPlan)) as weight)
+}
+
+def onBar(mutable contexts, msg, indicator){
+	print("交易时间：", contexts["tradeTime"])
+	//step1:选取因子值最大的50只股票
+	alpha1_strategy(contexts, msg)
+	weightsToday = contexts["targetWeight"]
+	//step 2: 获取策略当前的总资产
+	totalEquity = Backtest::getTotalPortfolios(contexts["engine"]).totalEquity[0]
+	//step 3: 计算目标持仓
+	pos = select symbol, longPosition from Backtest::getPosition(contexts["engine"])
+	pos = dict(pos.symbol,pos.longPosition)
+	update weightsToday set targetMv = totalEquity*(1- 2*contexts["commission"]-contexts["tax"])*weight
+	update weightsToday set close = each(getclosePrice{msg},symbol)
+	//科创版必须是200的倍数
+	update weightsToday set targetPos = iif(close <= 0.,0,iif(symbol.substr(0,2) == "68" and floor(targetMv/close) >= 200,
+	floor(targetMv/close),iif(symbol.substr(0,2) == "68",0,floor(floor(targetMv/close)/100)*100)))
+	update weightsToday set Pos = nullFill(pos[symbol],0)
+	// print(select * from weightsToday)
+	// print(contexts["tradeTime"])
+	//step 4: 先卖出
+	sell = select symbol,Pos-targetPos as num from weightsToday where targetPos-Pos < 0
+	sell = dict(sell.symbol,sell.num)
+	for(istock in sell.keys()){
+		data = msg[istock]
+		num = sell[istock]
+		if(isSellAble(data) and num > 0){
+			Backtest::submitOrder(contexts["engine"], (istock, contexts["tradeTime"], 5, msg[istock].close, num, 3), "卖出平仓")	
+		}
+	}
+	//step 5： 执行买入
+	buy = select symbol,targetPos-Pos as num from weightsToday where targetPos-Pos>0
+	buy = dict(buy.symbol,buy.num)
+	for(istock in buy.keys()){
+		data = msg[istock]
+		num = buy[istock]
+		cash = Backtest::getAvailableCash(contexts["engine"])
+		price = data.close
+		qty = getBuyAbleVolume(istock, cash*(1- contexts["commission"]), price)
+		num = min(checkBuyVolume(istock, num), qty)
+		if(isBuyAble(data) and num > 0){
+			Backtest::submitOrder(contexts["engine"], (istock, contexts["tradeTime"], 5, price, int(num), 1), "开仓买入")	
+		}
+	}	
+}
+
+
+//step 2：策略配置
+config = dict(STRING,ANY) 
+config["startDate"] = 2012.03.17        
+config["endDate"] = 2025.03.18       
+config["strategyGroup"] = "stock" //策略类型，还支持期货、期权、债券等
+config["cash"] = 100000000. //初始资金
+config["commission"] = 0.0005 //手续费
+config["tax"] = 0.001 //印花税
+config["dataType"]  = 4 //日频
+config["matchingMode"] = 3 //以委托价格成交
+config["outputOrderInfo"] = true 
+context=dict(STRING,ANY)
+context["commission"] = config["commission"]
+context["tax"] = config["tax"]
+config["context"] = context.copy()		
+
+//数据准备
+// colName = `symbol`tradeTime`open`low`high`close`volume`amount`upLimitPrice`downLimitPrice`prevClosePrice`signal
+// colType = [SYMBOL,TIMESTAMP,DOUBLE,DOUBLE,DOUBLE,DOUBLE,LONG,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE[]]
+
+signal = select securityid, timestamp(tradetime) as tradetime, value as value from loadTable("dfs://factors", "alpha101") where tradetime >= 2012.02.01 and factorname == 'alpha1'  //因子数据
+
+dailyKline = loadTable("dfs://tushare", "tushare_daily_st_sus_ind")  //基础行情数据
+// 合并因子值+筛选股票
+finalData = select ts_code as symbol,timestamp(trade_date) as tradeTime
+		,round(open*adj_factor, 2) as open, round(low*adj_factor, 2) as low ,round(high*adj_factor, 2) as high
+		,round(close*adj_factor, 2) as close,long(vol) as volume,
+		amount,0. as upLimitPrice,0. as downLimitPrice
+		,pre_close as prevClosePrice, total_mv as mv, value
+		from  dailyKline 
+		inner join signal on dailyKline.ts_code == signal.securityid and date(dailyKline.trade_date) == date(signal.tradetime)
+		where date(trade_date) >= 2012.02.01
+		and total_mv is not null
+		and is_st != "是" 
+        and market != "北交所"
+        and ts_code not like "%BJ"    
+        and (today()-datetimeParse(list_date, "yyyyMMdd")) > 730
+		order by tradeTime 
+
+select * from finalData limit 1000
+
+
+// step 3：创建回测引擎
+strategyName = "Backtest_test_alpha1"
+callbacks = dict(STRING,ANY)
+callbacks["onBar"] = onBar
+try{Backtest::dropBacktestEngine(strategyName)}catch(ex){print ex}
+engine = Backtest::createBacktester(strategyName, config, callbacks,, )
+
+//step 4：回测执行
+//回测执行
+//13年回测52s
+timer Backtest::appendQuotationMsg(engine,  finalData);
+
+///回测结束标志
+a = select * from finalData where tradeTime = max(tradeTime) limit 1
+update a set symbol = "END"
+Backtest::appendQuotationMsg(engine, a)
+go
+
+//step 5：获取回测结果
+// =================================获取回测结果==================================================
+tradeDetails = select * from Backtest::getTradeDetails(engine) 
+//获取持仓
+dailyPosition = select symbol,tradeDate,longPosition from  Backtest::getDailyPosition(engine)
+//获取策略净值
+dailyTotalPortfolios = Backtest::getDailyTotalPortfolios(engine)
+plot(dailyTotalPortfolios.netValue-1, dailyTotalPortfolios.tradeDate, "策略净值")
+
+//获取收益率
+returnSummary=Backtest::getReturnSummary(long(engine))
+
+
+//获取市场净值
+index = select * from loadTable("dfs://tushare", "t_index_hs300") where date(trade_date) in dailyTotalPortfolios["tradeDate"]
+index_netValue = select date(trade_date) as tradeDate, (close/close[0])-1 as netValue from index
+//计算超额收益
+excessReturn = select tradeDate, (dailyTotalPortfolios.netValue-1 - index_netValue.netValue) as excessReturn from dailyTotalPortfolios
+plot([dailyTotalPortfolios.netValue-1 as portfolioValue, index_netValue.netValue as marketValue, excessReturn.excessReturn as excessReturn], dailyTotalPortfolios.tradeDate, "策略净值")
+

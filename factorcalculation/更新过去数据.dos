@@ -1,0 +1,307 @@
+// 更新 tushare_daily_st_sus_ind
+def update_tushare_daily_st_sus_ind(day){
+    try{
+        conn = mysql::connect(`172.18.18.242, 3306, `quanter, `quantcreate2025, `daily_ts)
+        db = database("dfs://tushare")
+        tushare_daily_st_sus_ind = db.loadTable("tushare_daily_st_sus_ind")
+        tb1 = mysql::load(conn, "select * from tushare_daily_st_sus_ind where trade_date = '" + temporalFormat(day, "yyyy-MM-dd") + "'")
+        tb1 = select ts_code, date(trade_date) as trade_date, round(open, 3) as open, round(high, 3) as high, round(low, 3) as low, round(close, 3) as close, round(pre_close, 3) as pre_close, round(change, 3) as change, round(pct_chg/100, 4) as pct_chg, round(vol, 0) as vol, round(amount, 3) as amount, suspend_timing, suspend_type, round(adj_factor, 3) as adj_factor, round(pe, 4) as pe, round(pb, 4) as pb, round(ps, 4) as ps, round(dv_ratio, 4) as dv_ratio, round(total_share, 0) as total_share, round(float_share, 0) as float_share, round(free_share, 0) as free_share, round(total_mv, 0) as total_mv, round(circ_mv, 0) as circ_mv, code, st_name, is_st, short_name, area, industry, market, list_status, list_date from tb1
+        tushare_daily_st_sus_ind.append!(tb1)
+        row_num = count(tb1)
+        print("已更新" + day + "的tushare_daily_st_sus_ind数据，加入" + string(row_num) + "行")
+    }
+    catch(ex){
+        print("更新" + day + "的tushare_daily_st_sus_ind数据出错：" + ex[1])
+    }
+}
+
+// 更新t_index_zz500
+def update_t_index_zz500(day){
+    try{
+        conn = mysql::connect(`172.18.18.242, 3306, `quanter, `quantcreate2025, `daily_ts)
+        db = database("dfs://tushare")
+        t_index_zz500 = db.loadTable("t_index_zz500")
+        tb2 = mysql::load(conn, "select * from t_index_zz500 where trade_date = '" + temporalFormat(day, "yyyy-MM-dd") + "'")
+        tb2 = select ts_code, date(trade_date) as trade_date, round(close, 3) as close, round(open, 3) as open, round(high, 3) as high, round(low, 3) as low, round(pre_close, 3) as pre_close, round(change, 3) as change, round(pct_chg/100, 4) as pct_chg, round(vol, 0) as vol, round(amount, 3) as amount, update_time from tb2
+        t_index_zz500.append!(tb2)
+        row_num = count(tb2)
+        print("已更新" + day + "的t_index_zz500数据，加入" + string(row_num) + "行")
+    }
+    catch(ex){
+        print("更新" + day + "的t_index_zz500数据出错：" + ex[1])
+    }
+}
+
+// 更新t_index_hs300
+def update_t_index_hs300(day){
+    try{
+        conn = mysql::connect(`172.18.18.242, 3306, `quanter, `quantcreate2025, `daily_ts)
+        db = database("dfs://tushare")
+        t_index_hs300 = db.loadTable("t_index_hs300")
+        tb3 = mysql::load(conn, "select * from t_index_hs300 where trade_date = '" + temporalFormat(day, "yyyy-MM-dd") + "'")
+        tb3 = select ts_code, date(trade_date) as trade_date, round(close, 3) as close, round(open, 3) as open, round(high, 3) as high, round(low, 3) as low, round(pre_close, 3) as pre_close, round(change, 3) as change, round(pct_chg/100, 4) as pct_chg, round(vol, 0) as vol, round(amount, 3) as amount, update_time from tb3
+        t_index_hs300.append!(tb3)
+        row_num = count(tb3)
+        print("已更新" + day + "的t_index_hs300数据，加入" + string(row_num) + "行")
+    }
+    catch(ex){
+        print("更新" + day + "的t_index_hs300数据出错：" + ex[1])
+    }
+}
+
+// 更新minute_5_ts
+def update_minute_5_ts(day){
+    try{
+        conn2 = mysql::connect(`172.18.18.242, 3306, `quanter, `quantcreate2025, `minute_5_ts)
+        stock_list = mysql::showTables(conn2)
+        db = database("dfs://tushare")
+        minute_5_ts = db.loadTable("minute_5_ts")
+        for(tb_name in stock_list.Tables_in_minute_5_ts){
+            try{
+                starttime = second(now())
+                query = "select * from " + tb_name + " where day = '" + temporalFormat(day, "yyyy-MM-dd") + "'"
+                minute_data = mysql::load(conn2, query)
+                minute_data = select tradingdate, ticker, day, round(open, 2) as open, round(high, 2) as high, round(low, 2) as low, round(close, 2) as close, ts_code, round(volume, 0) as volume, round(amount, 0) as amount, round(adj_factor, 3) as adj_factor, string(suspend_type) as suspend_type, string(suspend_timing) as suspend_timing, round(total_mv, 0) as total_mv, string(st_name) as st_name, string(is_st) as is_st, round(pre_close, 2) as pre_close, round(change, 2) as change, string(update_time), round(f_open, 2) as f_open, round(f_high, 2) as f_high, round(f_low, 2) as f_low, round(f_close, 2) as f_close, round(f_volume, 0) as f_volume, round(f_amount, 0) as f_amount, round(f_factor, 3) as f_factor, string(ind_name) as ind_name, string(wind_name) as wind_name from minute_data
+                replaceColumn!(minute_data,"st_name",string(minute_data.st_name))
+                replaceColumn!(minute_data,"is_st",string(minute_data.is_st))
+                replaceColumn!(minute_data,"suspend_timing",string(minute_data.suspend_timing))
+                replaceColumn!(minute_data,"suspend_type",string(minute_data.suspend_type))
+                replaceColumn!(minute_data,"ind_name",string(minute_data.ind_name))
+                replaceColumn!(minute_data,"wind_name",string(minute_data.wind_name))
+                minute_5_ts.append!(minute_data)
+                row_num = count(minute_data)
+                endtime = second(now())
+                print("已导入 " + day + "日" + tb_name + " minute_5_ts数据，加入" + string(row_num) + "行，耗时" + string(endtime-starttime) + "秒")
+            }
+            catch(ex){
+                print("更新" + day + "的" + tb_name + "的5分钟数据出错：" + ex[1])
+            }         
+        }
+    }
+    catch(ex){
+        print("更新" + day + "的minute_5_ts数据出错：" + ex[1])
+    }
+}
+
+def update_fields(day){
+    try{
+        vwap_res = select ts_code, day, sum(f_volume * (f_high + f_low + f_close) * f_factor / 3)/sum(f_volume) as vwap from loadTable("dfs://tushare", `minute_5_ts) group by ts_code, day
+        index_zz500 = select ts_code, trade_date, open, close from loadTable("dfs://tushare", `t_index_zz500)
+        tushare_daily_st_sus_ind = select * from loadTable("dfs://tushare", `tushare_daily_st_sus_ind)
+        fields = select date(a.trade_date) as tradetime, a.ts_code as security, round(a.open*a.adj_factor, 5) as open, round(a.high*a.adj_factor, 5) as high, round(a.low*a.adj_factor, 5) as low, round(a.close*a.adj_factor, 5) as close, a.vol, a.amount, round(b.vwap, 5) as vwap, a.total_mv as cap, a.industry as indclass, c.open as index_open, c.close as index_close, a.suspend_type, a.is_st, a.market, a.list_status
+        from tushare_daily_st_sus_ind as a
+        left join vwap_res as b on date(a.trade_date) = b.day and a.ts_code = b.ts_code
+        left join index_zz500 as c on date(a.trade_date) = date(c.trade_date)
+        order by tradetime, security
+        fields = select * from fields where tradetime = day
+        db = database("dfs://tushare")
+        fields_handle = db.loadTable("fields")
+        fields_handle.append!(fields)
+        row_num = count(fields)
+        print("已更新" + day + "的fields数据，加入" + string(row_num) + "行")
+    }
+    catch(ex){
+        print("更新" + day + "的fields数据出错：" + ex[1])
+    }
+}
+
+
+
+
+
+use wq101alpha
+use prepare101
+use gtja191Alpha
+use gtja191Prepare
+
+// 更新基础数据
+def update_data(day){
+    print("更新【" + day + "】的数据：")
+    
+    starttime = second(now())
+
+    if (getMarketCalendar("SZSE", day, day)[0] is null){
+        print(day + "不是交易日")
+    }
+    else{
+        // 更新tushare_daily_st_sus_ind
+        already_day_1 = select distinct date(trade_date) as trade_date from loadTable("dfs://tushare", "tushare_daily_st_sus_ind")
+        if (day in already_day_1){
+            print(day + "的tushare_daily_st_sus_ind数据已存在")
+        }
+        else{
+            update_tushare_daily_st_sus_ind(day)
+        }
+
+        // 更新t_index_zz500
+        already_day_2 = select distinct date(trade_date) as trade_date from loadTable("dfs://tushare", "t_index_zz500")
+        if (day in already_day_2){
+            print(day + "的t_index_zz500数据已存在")
+        }
+        else{
+            update_t_index_zz500(day)
+        }
+
+        // 更新t_index_hs300
+        already_day_3 = select distinct date(trade_date) as trade_date from loadTable("dfs://tushare", "t_index_hs300")
+        if (day in already_day_3){
+            print(day + "的t_index_hs300数据已存在")
+        }
+        else{
+            update_t_index_hs300(day)
+        }
+
+        // 更新minute_5_ts
+        already_day_4 = select distinct day from loadTable("dfs://tushare", "minute_5_ts")
+        if (day in already_day_4){
+            print(day + "的minute_5_ts数据已存在")
+        }
+        else{
+            update_minute_5_ts(day)
+        }
+
+        // 更新fields
+        already_day_5 = select distinct tradetime from loadTable("dfs://tushare", "fields")
+        if (day in already_day_5){
+            print(day + "的fields数据已存在")
+        }
+        else{
+            update_fields(day)
+        }
+    }
+
+    endtime = second(now())
+    print(day + "的基础数据更新完成，共消耗" + string(endtime-starttime) + "秒")
+}
+
+
+def writePanelInLongTable_daily(result, factor, dbName, tbName, day){
+    if (typestr(result) == CODE){
+        res = result.eval()$DOUBLE
+    } else {
+        res = result
+    }
+    resWide = table(res.rowNames() as tradetime, res)
+    returnTable = resWide.unpivot(`tradetime, resWide.colNames()[1:])
+    returnTable[`factorname] = factor
+    returnTable.rename!(`valueType, `securityid)
+    returnTable.reorderColumns!(`tradetime`securityid`factorname`value)
+    returnTable = select * from returnTable where value is not null and tradetime = day
+    loadTable(dbName, tbName).append!(returnTable)
+    return count(returnTable)
+}
+
+
+
+// 更新过去数据
+for (day in 2025.03.20..2025.03.26){
+    // 基础数据
+    update_data(day)
+
+    if (getMarketCalendar("SZSE", day, day)[0] is null){
+        print(day + "不是交易日")
+    }
+    else{
+        already_day_6 = select distinct date(tradetime) as tradetime from loadTable("dfs://tushare", "alpha101")
+        if (day in already_day_6){
+            print(day + "的alpha101数据已存在")
+        }
+        else{
+            // alpha101
+            print("更新【" + day + "】的alpha101数据：")
+            try{
+                time1 = second(now())
+                raw_data = select * from loadTable("dfs://tushare", `fields) where suspend_type != "S" and is_st != "是" and market != "北交所" and list_status = "L"
+                not_null_data = select * from raw_data where close is not null and high is not null and low is not null and open is not null and vol is not null and amount is not null and vwap is not null
+                data = select security as securityid, tradetime, open, close, high, low, vol, vwap, cap, indclass from not_null_data 
+                
+                alpha101 = loadTable("dfs://tushare", `alpha101)
+                startTime = 2010.01.01
+                endTime = day
+                
+                for (i in 1:102){
+                    try{
+                        alphaName = exec name from defs() where name = "prepare101::calAlpha"+string(i)
+                        alphaSyntax = exec syntax from defs() where name = "prepare101::calAlpha"+string(i)
+                        function = alphaName + alphaSyntax
+                        t1 = second(now())
+                    
+                        // 计算因子
+                        res = parseExpr(function[0]).eval()
+                        factorname = "alpha" + string(i)
+                        row_num = writePanelInLongTable_daily(res, factorname, "dfs://tushare", "alpha101", day)
+                    
+                        t2 = second(now())
+                        print("已导入alpha" + string(i) + "数据，共消耗" + string(t2-t1) + "秒，加入" + string(row_num) + "行")
+                    }
+                    catch(ex){
+                        print("alpha" + string(i) + "导入出错：" + ex)
+                    }
+                }
+                
+                time2 = second(now())
+                print("已更新" + day + "的alpha101数据，共消耗" + string(time2-time1) + "秒")
+            }
+            catch(ex){
+                print("更新" + day + "的alpha101数据出错：" + ex[1])
+            }
+        }
+        
+
+        already_day_7 = select distinct date(tradetime) as tradetime from loadTable("dfs://tushare", "alpha191")
+        if (day in already_day_7){
+            print(day + "的alpha191数据已存在")
+        }
+        else{
+            // alpha191
+            print("更新【" + day + "】的alpha191数据：")
+            try{
+                time1 = second(now())
+                row_data = select * from loadTable("dfs://tushare", `fields) where suspend_type != "S" and is_st != "是" and market != "北交所" and list_status = "L"
+                not_null_data = select * from row_data where close is not null and high is not null and low is not null and open is not null and vol is not null and amount is not null and vwap is not null
+                data = select security as securityid, tradetime, vol, low, high, close, open, vwap, index_close, index_open from not_null_data 
+                alpha191 = loadTable("dfs://tushare", `alpha191)
+                startTime = 2010.01.01
+                endTime = day
+            
+                for (i in 1:192){
+                    try{
+                        alphaName = exec name from defs() where name = "gtja191Prepare::gtjaCalAlpha"+string(i)
+                        alphaSyntax = exec syntax from defs() where name = "gtja191Prepare::gtjaCalAlpha"+string(i)
+                        function = alphaName + alphaSyntax
+                        t1 = second(now())
+                
+                        // 计算因子
+                        res = parseExpr(function[0]).eval()
+                        factorname = "alpha" + string(i)
+                        row_num = writePanelInLongTable_daily(res, factorname, "dfs://tushare", "alpha191", day)
+                
+                        t2 = second(now())
+                        print("已导入alpha" + string(i) + "数据，共消耗" + string(t2-t1) + "秒，加入" + string(row_num) + "行")
+                    }
+                    catch(ex){
+                        print("alpha" + string(i) + "导入出错：" + ex)
+                    }
+                }
+            
+                time2 = second(now())
+                print("已更新" + day + "的alpha191数据，共消耗" + string(time2-time1) + "秒")
+            }
+            catch(ex){
+                print("更新" + day + "的alpha191数据出错：" + ex[1])
+            }
+        }
+    }
+    print("\n")
+}
+// 2025.02.04只有t_index_hs300数据，没有t_index_zz500数据，且2025.02.04显示不是交易日
+
+
+
+
+// 提交定时作业
+scheduleJob("dailyjob", "daily_updatedata", run{"/data/disk0/dolphindb/server/clusterDemo/data/dnode1/daily_job.dos"}, 12:30m, 2025.03.28, 2099.01.01, "D")
+getScheduledJobs()
+getRecentJobs()
+
+
